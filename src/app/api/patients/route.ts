@@ -1,6 +1,6 @@
 // app/api/patients/route.ts
-import { localPrisma } from '../../lib/db/local-client'
-import { NextResponse } from 'next/server'
+import { localPrisma } from '../../lib/db/local-client';
+import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
@@ -14,22 +14,23 @@ export async function GET() {
         },
       },
       orderBy: { created_at: 'desc' },
-    })
-    return NextResponse.json(patients)
+    });
+    return NextResponse.json(patients);
   } catch (error) {
-    console.error('Failed to fetch patients:', error)
+    console.error('Failed to fetch patients:', error);
     return NextResponse.json(
       { error: 'Failed to fetch patients' },
       { status: 500 }
-    )
+    );
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const { name, date_of_birth, phone, email, address, doctorIds } = body
+    const body = await request.json();
+    const { name, date_of_birth, phone, email, address, doctorIds } = body;
 
+    // Create patient
     const patient = await localPrisma.patient.create({
       data: {
         name,
@@ -37,12 +38,26 @@ export async function POST(request: Request) {
         phone,
         email,
         address,
-        doctors: {
-          create: doctorIds?.map((doctorId: string) => ({
-            doctor: { connect: { id: doctorId } },
-          })),
-        },
+        sync_status: 'Pending',
       },
+    });
+
+    // Create relationships with doctors
+    if (doctorIds && doctorIds.length > 0) {
+      for (const doctorId of doctorIds) {
+        await localPrisma.patientDoctor.create({
+          data: {
+            patient_id: patient.id,
+            doctor_id: doctorId,
+            sync_status: 'Pending',
+          },
+        });
+      }
+    }
+
+    // Return patient with doctors
+    const patientWithDoctors = await localPrisma.patient.findUnique({
+      where: { id: patient.id },
       include: {
         doctors: {
           include: {
@@ -50,14 +65,14 @@ export async function POST(request: Request) {
           },
         },
       },
-    })
+    });
 
-    return NextResponse.json(patient)
+    return NextResponse.json(patientWithDoctors);
   } catch (error) {
-    console.error('Failed to create patient:', error)
+    console.error('Failed to create patient:', error);
     return NextResponse.json(
       { error: 'Failed to create patient' },
       { status: 500 }
-    )
+    );
   }
 }
