@@ -1,9 +1,12 @@
 // app/api/patients/route.ts
-import { localPrisma } from '../../lib/db/local-client';
 import { NextResponse } from 'next/server';
+import { offlineQueue } from '../../lib/sync/offline-queue';
+import { PatientFormData, ApiResponse } from '../../types';
 
-export async function GET() {
+export async function GET(): Promise<NextResponse<ApiResponse<any[]>>> {
   try {
+    const { localPrisma } = await import('../../lib/db/local-client');
+
     const patients = await localPrisma.patient.findMany({
       where: { is_deleted: false },
       include: {
@@ -15,35 +18,41 @@ export async function GET() {
       },
       orderBy: { created_at: 'desc' },
     });
-    return NextResponse.json(patients);
+
+    return NextResponse.json({
+      success: true,
+      data: patients,
+    });
   } catch (error) {
     console.error('Failed to fetch patients:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch patients' },
+      {
+        success: false,
+        error: 'Failed to fetch patients'
+      },
       { status: 500 }
     );
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<NextResponse<ApiResponse<any>>> {
   try {
-    const body = await request.json();
+    const body: PatientFormData = await request.json();
     const { name, date_of_birth, phone, email, address, doctorIds } = body;
 
-    // Create patient
-    const patient = await localPrisma.patient.create({
-      data: {
-        name,
-        date_of_birth: date_of_birth ? new Date(date_of_birth) : null,
-        phone,
-        email,
-        address,
-        sync_status: 'Pending',
-      },
+    // Use offline queue to handle patient creation
+    const patient = await offlineQueue.addPatient({
+      name,
+      date_of_birth,
+      phone,
+      email,
+      address,
     });
 
-    // Create relationships with doctors
+    // Handle doctor relationships
     if (doctorIds && doctorIds.length > 0) {
+      const { localPrisma } = await import('../../lib/db/local-client');
+
       for (const doctorId of doctorIds) {
         await localPrisma.patientDoctor.create({
           data: {
@@ -55,7 +64,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // Return patient with doctors
+    // Return the created patient with relations
+    const { localPrisma } = await import('../../lib/db/local-client');
     const patientWithDoctors = await localPrisma.patient.findUnique({
       where: { id: patient.id },
       include: {
@@ -67,11 +77,17 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(patientWithDoctors);
+    return NextResponse.json({
+      success: true,
+      data: patientWithDoctors,
+    });
   } catch (error) {
     console.error('Failed to create patient:', error);
     return NextResponse.json(
-      { error: 'Failed to create patient' },
+      {
+        success: false,
+        error: 'Failed to create patient'
+      },
       { status: 500 }
     );
   }

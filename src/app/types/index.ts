@@ -1,5 +1,9 @@
 // types/index.ts
 import { Patient, Doctor, Test, PatientDoctor, SyncStatus, TestStatus } from '@prisma/client';
+import { PatientQueueData, DoctorQueueData, TestQueueData, PatientFormData, DoctorFormData, TestFormData } from './sync';
+
+// Re-export everything
+export * from './sync';
 
 // Patient with relations
 export type PatientWithRelations = Patient & {
@@ -24,7 +28,13 @@ export type DoctorWithRelations = Doctor & {
 // Test with doctor relation
 export type TestWithDoctor = Test & {
   doctor: Doctor | null;
-  patient?: Patient; // Optional for when we include patient
+  patient?: Patient;
+};
+
+// Test with patient and doctor
+export type TestWithRelations = Test & {
+  patient: Patient;
+  doctor: Doctor | null;
 };
 
 // PatientDoctor with doctor relation
@@ -35,9 +45,4 @@ export type PatientDoctorWithDoctor = PatientDoctor & {
 // PatientDoctor with patient relation
 export type PatientDoctorWithPatient = PatientDoctor & {
   patient: Patient;
-};
-
-// For tests with patient
-export type PatientWithDoctor = Patient & {
-  tests: Test[];
 };
