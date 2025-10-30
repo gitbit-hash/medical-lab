@@ -11,12 +11,33 @@ export type PatientWithRelations = Patient & {
   })[];
 };
 
+// Doctor with relations
+export type DoctorWithRelations = Doctor & {
+  patients: (PatientDoctor & {
+    patient: Patient & {
+      tests: Test[];
+    };
+  })[];
+  tests: Test[];
+};
+
 // Test with doctor relation
 export type TestWithDoctor = Test & {
   doctor: Doctor | null;
+  patient?: Patient; // Optional for when we include patient
 };
 
 // PatientDoctor with doctor relation
 export type PatientDoctorWithDoctor = PatientDoctor & {
   doctor: Doctor;
+};
+
+// PatientDoctor with patient relation
+export type PatientDoctorWithPatient = PatientDoctor & {
+  patient: Patient;
+};
+
+// For tests with patient
+export type PatientWithDoctor = Patient & {
+  tests: Test[];
 };
