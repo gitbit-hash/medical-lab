@@ -1,0 +1,135 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Patient {
+  id           String    @id @default(uuid())
+  local_id     String?   @unique
+  name         String
+  date_of_birth DateTime?
+  phone        String?
+  email        String?
+  address      String?
+  
+  // Relations
+  doctors      PatientDoctor[]
+  tests        Test[]
+  
+  // Sync metadata
+  sync_status   SyncStatus @default(Pending)
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+  last_synced_at DateTime?
+  is_deleted    Boolean    @default(false)
+  version       Int       @default(1)
+
+  @@map("patients")
+}
+
+model Doctor {
+  id             String    @id @default(uuid())
+  local_id       String?   @unique
+  name           String
+  specialization String?
+  phone          String?
+  email          String?
+  clinic_address String?
+  
+  // Relations
+  patients       PatientDoctor[]
+  tests          Test[]
+  
+  // Sync metadata
+  sync_status   SyncStatus @default(Pending)
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+  last_synced_at DateTime?
+  is_deleted    Boolean    @default(false)
+  version       Int       @default(1)
+
+  @@map("doctors")
+}
+
+model PatientDoctor {
+  id          String    @id @default(uuid())
+  patient_id  String
+  doctor_id   String
+  referred_at DateTime  @default(now())
+  is_primary  Boolean   @default(false)
+  notes       String?
+  
+  // Relations
+  patient    Patient @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  doctor     Doctor  @relation(fields: [doctor_id], references: [id], onDelete: Cascade)
+  
+  // Sync metadata
+  sync_status   SyncStatus @default(Pending)
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+  last_synced_at DateTime?
+  is_deleted    Boolean    @default(false)
+
+  @@unique([patient_id, doctor_id])
+  @@map("patient_doctors")
+}
+
+model Test {
+  id           String    @id @default(uuid())
+  local_id     String?   @unique
+  patient_id   String
+  referring_doctor_id String?
+  test_type    String
+  test_code    String?
+  status       TestStatus @default(Pending)
+  results      Json?
+  normal_range Json?
+  units        String?
+  tested_at    DateTime?
+  completed_at DateTime?
+  
+  // Relations
+  patient      Patient @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  doctor       Doctor?  @relation(fields: [referring_doctor_id], references: [id], onDelete: SetNull)
+  
+  // Sync metadata
+  sync_status   SyncStatus @default(Pending)
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+  last_synced_at DateTime?
+  is_deleted    Boolean    @default(false)
+  version       Int       @default(1)
+
+  @@map("tests")
+}
+
+model SyncLog {
+  id               String   @id @default(uuid())
+  entity_type      String
+  entity_id        String
+  operation        String   // CREATE, UPDATE, DELETE
+  local_timestamp  DateTime @default(now())
+  synced_at        DateTime?
+  data_before      Json?
+  data_after       Json?
+
+  @@map("sync_logs")
+}
+
+enum SyncStatus {
+  Pending
+  Synced
+  Conflict
+}
+
+enum TestStatus {
+  Pending
+  InProgress
+  Completed
+  Cancelled
+}
