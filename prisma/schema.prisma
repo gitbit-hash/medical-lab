@@ -79,31 +79,92 @@ model PatientDoctor {
   @@map("patient_doctors")
 }
 
+model TestCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  parent_id   String?
+  parent      TestCategory? @relation("CategoryHierarchy", fields: [parent_id], references: [id])
+  children    TestCategory[] @relation("CategoryHierarchy")
+  tests       TestTemplate[]
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  is_active   Boolean  @default(true)
+
+  @@map("test_categories")
+}
+
+model TestTemplate {
+  id               String   @id @default(uuid())
+  name             String
+  code             String   @unique
+  category_id      String
+  category         TestCategory @relation(fields: [category_id], references: [id])
+  description      String?
+  specimen         String?
+  container        String?
+  volume           String?
+  storage          String?
+  methodology      String?
+  turnaround_time  String?
+  fees             Float?
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+  expired_at       DateTime?
+
+  parameters       TestParameter[]
+  patient_tests    Test[]
+
+  @@map("test_templates")
+}
+
+model TestParameter {
+  id               String   @id @default(uuid())
+  test_template_id String
+  test_template    TestTemplate @relation(fields: [test_template_id], references: [id], onDelete: Cascade)
+  name             String
+  code             String?
+  units            String?
+  default_value    String?
+  normal_range_min Float?
+  normal_range_max Float?
+  normal_range_text String?
+  is_critical      Boolean  @default(false)
+  sort_order       Int      @default(0)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@map("test_parameters")
+}
+
 model Test {
-  id           String    @id @default(uuid())
-  local_id     String?   @unique
-  patient_id   String
-  referring_doctor_id String?
-  test_type    String
-  test_code    String?
-  status       TestStatus @default(Pending)
-  results      Json?
-  normal_range Json?
-  units        String?
-  tested_at    DateTime?
-  completed_at DateTime?
+  id                   String    @id @default(uuid())
+  local_id             String?   @unique
+  patient_id           String
+  referring_doctor_id  String?
+  test_type            String
+  test_code            String?
+  test_template_id     String?
+  status               TestStatus @default(Pending)
+  results              Json?
+  normal_range         Json?
+  units                String?
+  tested_at            DateTime?
+  completed_at         DateTime?
   
   // Relations
-  patient      Patient @relation(fields: [patient_id], references: [id], onDelete: Cascade)
-  doctor       Doctor?  @relation(fields: [referring_doctor_id], references: [id], onDelete: SetNull)
+  patient              Patient @relation(fields: [patient_id], references: [id], onDelete: Cascade)
+  doctor               Doctor? @relation(fields: [referring_doctor_id], references: [id], onDelete: SetNull)
+  test_template        TestTemplate? @relation(fields: [test_template_id], references: [id])
   
   // Sync metadata
-  sync_status   SyncStatus @default(Pending)
-  created_at    DateTime   @default(now())
-  updated_at    DateTime   @updatedAt
-  last_synced_at DateTime?
-  is_deleted    Boolean    @default(false)
-  version       Int       @default(1)
+  sync_status          SyncStatus @default(Pending)
+  created_at           DateTime   @default(now())
+  updated_at           DateTime   @updatedAt
+  last_synced_at       DateTime?
+  is_deleted           Boolean    @default(false)
+  version              Int       @default(1)
 
   @@map("tests")
 }
@@ -112,7 +173,7 @@ model SyncLog {
   id               String   @id @default(uuid())
   entity_type      String
   entity_id        String
-  operation        String   // CREATE, UPDATE, DELETE
+  operation        String
   local_timestamp  DateTime @default(now())
   synced_at        DateTime?
   data_before      Json?

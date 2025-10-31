@@ -4,16 +4,15 @@ import { localPrisma } from '../../../lib/db/local-client';
 import { TestFormData, ApiResponse } from '../../../types';
 import { Prisma } from '@prisma/client';
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
-
-export async function GET(request: Request, { params }: RouteParams): Promise<NextResponse<ApiResponse<any>>> {
+// Remove the old interface and use the new Next.js pattern
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse<ApiResponse<any>>> {
   try {
+    const { id } = await params; // Await the params
     const test = await localPrisma.test.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         patient: true,
         doctor: true,
@@ -46,7 +45,10 @@ export async function GET(request: Request, { params }: RouteParams): Promise<Ne
   }
 }
 
-export async function PUT(request: Request, { params }: RouteParams): Promise<NextResponse<ApiResponse<any>>> {
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse<ApiResponse<any>>> {
   try {
     const body: TestFormData = await request.json();
     const {
@@ -61,6 +63,8 @@ export async function PUT(request: Request, { params }: RouteParams): Promise<Ne
       tested_at,
       completed_at,
     } = body;
+
+    const { id } = await params; // Await the params
 
     // Build update data with proper JSON handling
     const updateData: any = {
@@ -89,7 +93,7 @@ export async function PUT(request: Request, { params }: RouteParams): Promise<Ne
     }
 
     const test = await localPrisma.test.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         patient: true,

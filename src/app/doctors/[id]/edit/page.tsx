@@ -5,14 +5,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-interface EditDoctorPageProps {
-  params: {
-    id: string;
-  };
-}
-
-export default function EditDoctorPage({ params }: EditDoctorPageProps) {
-  const { id } = useParams();
+// Remove the props interface and use useParams hook instead
+export default function EditDoctorPage() {
+  const params = useParams();
+  const id = params.id as string;
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,7 +22,9 @@ export default function EditDoctorPage({ params }: EditDoctorPageProps) {
   });
 
   useEffect(() => {
-    loadDoctor();
+    if (id) {
+      loadDoctor();
+    }
   }, [id]);
 
   const loadDoctor = async () => {
@@ -48,6 +46,8 @@ export default function EditDoctorPage({ params }: EditDoctorPageProps) {
       setIsLoading(false);
     }
   };
+
+  // ... rest of your component code remains the same
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

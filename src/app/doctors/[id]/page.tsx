@@ -2,7 +2,7 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { localPrisma } from '../../lib/db/local-client';
-import { DoctorWithRelations, PatientWithDoctor } from '../../types';
+import { DoctorWithRelations } from '../../types';
 
 interface DoctorDetailPageProps {
   params: Promise<{ id: string }>
