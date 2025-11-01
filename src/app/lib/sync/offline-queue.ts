@@ -1,6 +1,7 @@
 // lib/sync/offline-queue.ts
 import { SyncStatus, TestStatus, Prisma } from '@prisma/client';
 import { PatientQueueData, DoctorQueueData, TestQueueData } from '../../types/sync';
+import { SyncService } from './sync-service';
 
 class OfflineQueue {
   private isOnline = true;
@@ -191,33 +192,13 @@ class OfflineQueue {
   }
 
   // Try to sync pending changes
-  async trySync(): Promise<boolean> {
+  private async trySync(): Promise<boolean> {
     if (!this.isOnline) {
       console.log('Cannot sync - offline');
       return false;
     }
 
-    try {
-      console.log('Attempting sync...');
-      const response = await fetch('/api/sync', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Sync successful:', result);
-        return true;
-      } else {
-        console.error('Sync failed:', await response.text());
-        return false;
-      }
-    } catch (error) {
-      console.error('Sync error:', error);
-      return false;
-    }
+    return await SyncService.triggerSync();
   }
 
   // Manual sync trigger

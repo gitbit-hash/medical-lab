@@ -116,3 +116,35 @@ export async function PUT(
     );
   }
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse<ApiResponse<any>>> {
+  try {
+    const { id } = await params;
+
+    // Soft delete the test
+    const test = await localPrisma.test.update({
+      where: { id },
+      data: {
+        is_deleted: true,
+        sync_status: 'Pending',
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: test,
+    });
+  } catch (error) {
+    console.error('Failed to delete test:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to delete test'
+      },
+      { status: 500 }
+    );
+  }
+}

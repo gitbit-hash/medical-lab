@@ -8,13 +8,17 @@ import {
   TestStatus,
   TestTemplate,
   TestParameter,
-  TestCategory  // Add this import
+  TestCategory
 } from '@prisma/client';
 
-// Re-export everything
+// Re-export everything from sync
 export * from './sync';
 
-// Add the missing TestWithDoctor type
+// Base types without relations for API responses
+export type TestCategoryBase = TestCategory;
+export type TestTemplateBase = TestTemplate;
+
+// Test with doctor relation
 export type TestWithDoctor = Test & {
   doctor: Doctor | null;
 };
@@ -24,10 +28,7 @@ export type PatientWithRelations = Patient & {
   doctors: (PatientDoctor & {
     doctor: Doctor;
   })[];
-  tests: (Test & {
-    doctor: Doctor | null;
-    test_template: TestTemplateWithCategoryAndParams | null;
-  })[];
+  tests: TestWithDoctor[];
 };
 
 // Doctor with relations
@@ -53,13 +54,13 @@ export type TestWithPatientAndDoctor = Test & {
   doctor: Doctor | null;
 };
 
-// TestCategory with relations - NOW THIS WILL WORK
+// TestCategory with relations - make children and tests optional
 export type TestCategoryWithChildren = TestCategory & {
-  children: TestCategory[];
-  tests: TestTemplate[];
+  children?: TestCategoryWithChildren[];
+  tests?: TestTemplateWithCategory[];
 };
 
-// TestTemplate with relations
+// TestTemplate with category
 export type TestTemplateWithCategory = TestTemplate & {
   category: TestCategory;
 };
@@ -82,4 +83,15 @@ export type PatientDoctorWithDoctor = PatientDoctor & {
 // PatientDoctor with patient relation
 export type PatientDoctorWithPatient = PatientDoctor & {
   patient: Patient;
+};
+
+// API response types for test selection
+export type TestCategoryTree = TestCategory & {
+  children?: TestCategoryTree[];
+  tests?: TestTemplateWithCategory[];
+};
+
+export type TestTemplateSearchResult = TestTemplate & {
+  category: TestCategory;
+  parameters: TestParameter[]; // Add this
 };

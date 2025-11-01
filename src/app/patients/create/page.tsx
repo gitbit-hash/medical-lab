@@ -1,9 +1,10 @@
-// app/patients/create/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { TestSelectionForm } from '../../components/test-selection-form';
+import { TestTemplateSearchResult } from '../../types';
 
 interface Doctor {
   id: string;
@@ -15,7 +16,9 @@ export default function CreatePatientPage() {
   const router = useRouter();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedDoctors, setSelectedDoctors] = useState<string[]>([]);
+  const [selectedTests, setSelectedTests] = useState<TestTemplateSearchResult[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -41,12 +44,35 @@ export default function CreatePatientPage() {
     }
   };
 
+  const validateForm = () => {
+    const errors: string[] = [];
+
+    if (!formData.name.trim()) {
+      errors.push('Patient name is required');
+    }
+
+    if (selectedTests.length === 0) {
+      errors.push('At least one test must be selected');
+    }
+
+    setFormErrors(errors);
+    return errors.length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateForm()) {
+      // Scroll to top to show errors
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/patients', {
+      // First create the patient
+      const patientResponse = await fetch('/api/patients', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -57,14 +83,36 @@ export default function CreatePatientPage() {
         }),
       });
 
-      if (response.ok) {
-        router.push('/patients');
-      } else {
-        alert('Failed to create patient');
+      if (!patientResponse.ok) {
+        throw new Error('Failed to create patient');
       }
+
+      const patientResult = await patientResponse.json();
+      const patientId = patientResult.data?.id || patientResult.id;
+
+      // Then create tests for the patient
+      const testPromises = selectedTests.map(test =>
+        fetch('/api/tests', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            patient_id: patientId,
+            test_type: test.name,
+            test_code: test.code,
+            test_template_id: test.id,
+            status: 'Pending',
+          }),
+        })
+      );
+
+      await Promise.all(testPromises);
+      router.push('/patients');
+
     } catch (error) {
       console.error('Failed to create patient:', error);
-      alert('Failed to create patient');
+      alert('Failed to create patient and tests');
     } finally {
       setIsSubmitting(false);
     }
@@ -80,7 +128,7 @@ export default function CreatePatientPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-6">
           <Link
@@ -90,15 +138,27 @@ export default function CreatePatientPage() {
             ← Back to Patients
           </Link>
           <h1 className="text-3xl font-bold text-gray-900">Add New Patient</h1>
-          <p className="text-gray-600 mt-2">Create a new patient record</p>
+          <p className="text-gray-600 mt-2">Create a new patient record with laboratory tests</p>
         </div>
 
+        {/* Form Errors */}
+        {formErrors.length > 0 && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <h3 className="font-semibold text-red-800 mb-2">Please fix the following errors:</h3>
+            <ul className="list-disc list-inside text-red-700">
+              {formErrors.map((error, index) => (
+                <li key={index}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Patient Form */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
-          <div className="space-y-6">
+        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow">
+          <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
             {/* Basic Information */}
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Patient Information</h2>
 
               <div className="grid grid-cols-1 gap-4">
                 <div>
@@ -170,9 +230,19 @@ export default function CreatePatientPage() {
               </div>
             </div>
 
+            {/* Test Selection */}
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Laboratory Tests *</h2>
+              <p className="text-gray-600 mb-4">Select at least one test for the patient</p>
+              <TestSelectionForm
+                selectedTests={selectedTests}
+                onTestsChange={setSelectedTests}
+              />
+            </div>
+
             {/* Referring Doctors */}
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Referring Doctors</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Referring Doctors</h2>
               <div className="border border-gray-200 rounded-md p-4 max-h-60 overflow-y-auto">
                 {doctors.length === 0 ? (
                   <div className="text-center text-gray-500 py-4">
@@ -205,21 +275,23 @@ export default function CreatePatientPage() {
                 )}
               </div>
             </div>
+          </div>
 
-            {/* Form Actions */}
-            <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+          {/* Sticky Form Actions */}
+          <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 rounded-b-lg">
+            <div className="flex justify-end space-x-4">
               <Link
                 href="/patients"
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                className="px-6 py-3 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors font-medium"
               >
                 Cancel
               </Link>
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="bg-blue-500 text-white px-6 py-2 rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                disabled={isSubmitting || selectedTests.length === 0}
+                className="bg-blue-500 text-white px-8 py-3 rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
               >
-                {isSubmitting ? 'Creating...' : 'Create Patient'}
+                {isSubmitting ? 'Creating Patient...' : 'Create Patient & Tests'}
               </button>
             </div>
           </div>

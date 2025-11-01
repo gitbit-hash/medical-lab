@@ -1,9 +1,7 @@
-// app/patients/[id]/page.tsx
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { localPrisma } from '../../lib/db/local-client';
 import { TestStatus } from '@prisma/client';
-import { PatientWithRelations, TestWithDoctor, PatientDoctorWithDoctor } from '../../types';
 
 interface PatientDetailPageProps {
   params: Promise<{ id: string }>
@@ -12,26 +10,77 @@ interface PatientDetailPageProps {
 export default async function PatientDetailPage({ params }: PatientDetailPageProps) {
   const { id } = await params
 
+  // CLEAN QUERY: Load patient with minimal, non-nested relationships
   const patient = await localPrisma.patient.findUnique({
-    where: { id }, // Only use unique identifier here
-    include: {
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      date_of_birth: true,
+      phone: true,
+      email: true,
+      address: true,
+      created_at: true,
+      is_deleted: true,
+      // Doctors - simple relation
       doctors: {
+        where: { is_deleted: false },
         include: {
-          doctor: true,
+          doctor: {
+            select: {
+              id: true,
+              name: true,
+              specialization: true
+            }
+          }
         },
+        orderBy: { referred_at: 'desc' }
       },
+      // Tests - simple relation without nesting
       tests: {
+        where: { is_deleted: false },
         include: {
-          doctor: true,
+          doctor: {
+            select: {
+              id: true,
+              name: true,
+              specialization: true
+            }
+          }
         },
-        orderBy: { created_at: 'desc' },
-      },
-    },
-  }) as PatientWithRelations | null;
+        orderBy: { created_at: 'desc' }
+      }
+    }
+  });
 
-  // Then check if patient exists and is not deleted
   if (!patient || patient.is_deleted) {
     notFound();
+  }
+
+  // Debug the actual data
+  console.log('🩺 PATIENT DETAIL DEBUG:', {
+    patientId: patient.id,
+    patientName: patient.name,
+    totalTests: patient.tests.length,
+    testDetails: patient.tests.map(t => ({
+      id: t.id,
+      test_type: t.test_type,
+      test_code: t.test_code,
+      status: t.status,
+      created_at: t.created_at
+    }))
+  });
+
+  // Check for duplicates by ID
+  const testIds = patient.tests.map(t => t.id);
+  const hasDuplicates = new Set(testIds).size !== testIds.length;
+
+  if (hasDuplicates) {
+    console.log('🚨 DUPLICATE TEST IDs FOUND:', {
+      total: testIds.length,
+      unique: new Set(testIds).size,
+      duplicates: testIds.filter((id, index) => testIds.indexOf(id) !== index)
+    });
   }
 
   // Helper function to get status classes
@@ -81,6 +130,12 @@ export default async function PatientDetailPage({ params }: PatientDetailPagePro
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{patient.name}</h1>
               <p className="text-gray-600 mt-2">Patient Details</p>
+              {/* Debug info */}
+              {hasDuplicates && (
+                <div className="mt-2 p-2 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
+                  ⚠️ Debug: Found {testIds.length - new Set(testIds).size} duplicate tests
+                </div>
+              )}
             </div>
             <Link
               href={`/patients/${patient.id}/edit`}
@@ -133,18 +188,12 @@ export default async function PatientDetailPage({ params }: PatientDetailPagePro
 
             {/* Tests Card */}
             <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Laboratory Tests</h2>
-                <Link
-                  href={`/tests/create?patientId=${patient.id}`}
-                  className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
-                >
-                  Add Test
-                </Link>
-              </div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Laboratory Tests ({patient.tests.length})
+              </h2>
               {patient.tests.length > 0 ? (
-                <div className="space-y-3">
-                  {patient.tests.map((test: TestWithDoctor) => (
+                <div className="space-y-3 mt-4">
+                  {patient.tests.map((test) => (
                     <div key={test.id} className="border border-gray-200 rounded-lg p-4">
                       <div className="flex justify-between items-start">
                         <div>
@@ -165,6 +214,8 @@ export default async function PatientDetailPage({ params }: PatientDetailPagePro
                           Tested: {new Date(test.tested_at).toLocaleDateString()}
                         </p>
                       )}
+                      {/* Debug: Show test ID */}
+                      <p className="text-xs text-gray-400 mt-1">ID: {test.id}</p>
                     </div>
                   ))}
                 </div>
@@ -180,7 +231,7 @@ export default async function PatientDetailPage({ params }: PatientDetailPagePro
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Referring Doctors</h2>
               {patient.doctors.length > 0 ? (
                 <div className="space-y-3">
-                  {patient.doctors.map((pd: PatientDoctorWithDoctor) => (
+                  {patient.doctors.map((pd) => (
                     <div key={pd.id} className="border border-gray-200 rounded-lg p-3">
                       <h3 className="font-medium text-gray-900">{pd.doctor.name}</h3>
                       {pd.doctor.specialization && (

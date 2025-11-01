@@ -48,6 +48,7 @@ export interface TestQueueData {
   referring_doctor_id?: string | null;
   test_type: string;
   test_code?: string | null;
+  test_template_id: string | null;
   status?: TestStatus;
   results?: Record<string, unknown> | null;
   normal_range?: Record<string, unknown> | null;
@@ -87,6 +88,7 @@ export interface TestFormData {
   referring_doctor_id?: string;
   test_type: string;
   test_code?: string;
+  test_template_id?: string;
   status?: TestStatus;
   results?: Record<string, unknown>;
   normal_range?: Record<string, unknown>;
