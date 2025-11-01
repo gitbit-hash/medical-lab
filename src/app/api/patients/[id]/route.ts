@@ -18,9 +18,11 @@ export async function GET(
           },
         },
         tests: {
+          where: { is_deleted: false },
           include: {
             doctor: true,
           },
+          orderBy: { created_at: 'desc' },
         },
       },
     });
@@ -115,6 +117,70 @@ export async function PUT(
       {
         success: false,
         error: 'Failed to update patient'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse<ApiResponse<any>>> {
+  try {
+    const { id } = await params;
+
+    // First, check if patient exists and is not already deleted
+    const existingPatient = await localPrisma.patient.findUnique({
+      where: { id },
+    });
+
+    if (!existingPatient) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Patient not found'
+        },
+        { status: 404 }
+      );
+    }
+
+    if (existingPatient.is_deleted) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Patient already deleted'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Use offline queue to handle patient deletion (soft delete)
+    const { offlineQueue } = await import('../../../lib/sync/offline-queue');
+
+    // Soft delete the patient through the offline queue
+    const deletedPatient = await offlineQueue.addPatient({
+      id,
+      name: existingPatient.name,
+      date_of_birth: existingPatient.date_of_birth?.toISOString(),
+      phone: existingPatient.phone,
+      email: existingPatient.email,
+      address: existingPatient.address,
+      sync_status: 'Pending', // Mark for sync
+      is_deleted: true, // This will be handled by the queue
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: deletedPatient,
+      message: 'Patient deleted successfully'
+    });
+  } catch (error) {
+    console.error('Failed to delete patient:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to delete patient'
       },
       { status: 500 }
     );

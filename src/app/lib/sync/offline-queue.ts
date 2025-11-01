@@ -55,6 +55,7 @@ class OfflineQueue {
         id: patientId,
         local_id: patientData.id ? null : patientId,
         sync_status: 'Pending' as SyncStatus,
+        is_deleted: patientData.is_deleted || false,
       });
 
       // If online, try immediate sync
@@ -116,21 +117,45 @@ class OfflineQueue {
   }
 
   // Store patient locally
-  private async storePatientLocally(patientData: PatientQueueData & { id: string; sync_status: SyncStatus }): Promise<any> {
+  private async storePatientLocally(patientData: PatientQueueData & { id: string; sync_status: SyncStatus; is_deleted?: boolean }): Promise<any> {
     const { localPrisma } = await import('../db/local-client');
 
-    return await localPrisma.patient.create({
-      data: {
-        id: patientData.id,
-        local_id: patientData.local_id,
-        name: patientData.name,
-        date_of_birth: patientData.date_of_birth ? new Date(patientData.date_of_birth) : null,
-        phone: patientData.phone,
-        email: patientData.email,
-        address: patientData.address,
-        sync_status: patientData.sync_status,
-      },
+    // Check if patient already exists (for updates/soft delete)
+    const existingPatient = await localPrisma.patient.findUnique({
+      where: { id: patientData.id },
     });
+
+    if (existingPatient) {
+      // Update existing patient (including soft delete)
+      return await localPrisma.patient.update({
+        where: { id: patientData.id },
+        data: {
+          name: patientData.name,
+          date_of_birth: patientData.date_of_birth ? new Date(patientData.date_of_birth) : null,
+          phone: patientData.phone,
+          email: patientData.email,
+          address: patientData.address,
+          sync_status: patientData.sync_status,
+          is_deleted: patientData.is_deleted !== undefined ? patientData.is_deleted : existingPatient.is_deleted,
+          updated_at: new Date(),
+        },
+      });
+    } else {
+      // Create new patient
+      return await localPrisma.patient.create({
+        data: {
+          id: patientData.id,
+          local_id: patientData.local_id,
+          name: patientData.name,
+          date_of_birth: patientData.date_of_birth ? new Date(patientData.date_of_birth) : null,
+          phone: patientData.phone,
+          email: patientData.email,
+          address: patientData.address,
+          sync_status: patientData.sync_status,
+          is_deleted: patientData.is_deleted || false,
+        },
+      });
+    }
   }
 
   // Store doctor locally

@@ -40,7 +40,6 @@ export default function EditPatientPage() {
 
   const loadPatientData = async () => {
     try {
-      console.log('🔄 Starting to load patient data for:', patientId);
 
       const [patientRes, doctorsRes] = await Promise.all([
         fetch(`/api/patients/${patientId}`),
@@ -62,8 +61,6 @@ export default function EditPatientPage() {
       const testsData = await testsRes.json();
       const patientTests = testsData.data || testsData;
 
-      console.log('📋 Loaded patient tests:', patientTests);
-
       // Set patient form data
       setFormData({
         name: patient.name,
@@ -84,15 +81,8 @@ export default function EditPatientPage() {
       // Load test templates for existing tests - TYPE-SAFE VERSION
       // Load test templates for existing tests - COMPLETE FIXED VERSION
       if (patientTests.length > 0) {
-        console.log('🔄 Loading templates for patient tests:', patientTests);
 
         const testTemplatesPromises = patientTests.map(async (test: any) => {
-          console.log('📋 Processing test:', {
-            id: test.id,
-            test_type: test.test_type,
-            test_template_id: test.test_template_id
-          });
-
           let template: TestTemplateWithCategoryAndParams | null = null;
           let recoveredFees = 0;
 
@@ -104,7 +94,6 @@ export default function EditPatientPage() {
                 const templateData = await templateRes.json();
                 template = templateData.data;
                 recoveredFees = template?.fees || 0;
-                console.log(`✅ Template loaded by ID: $${recoveredFees}`);
               }
             } catch (error) {
               console.error(`Error loading template ${test.test_template_id}:`, error);
@@ -122,7 +111,6 @@ export default function EditPatientPage() {
                 if (matchingTemplates.length > 0) {
                   const matchedTemplate = matchingTemplates[0];
                   recoveredFees = matchedTemplate.fees || 0;
-                  console.log(`💰 Found template by name: $${recoveredFees}`);
                   template = matchedTemplate;
                 }
               }
@@ -133,7 +121,6 @@ export default function EditPatientPage() {
 
           // STEP 3: Create proper synthetic template with parameters
           if (!template) {
-            console.log(`🔄 Creating synthetic template`);
             const now = new Date();
 
             template = {
@@ -171,21 +158,14 @@ export default function EditPatientPage() {
             } as TestTemplateWithCategoryAndParams;
           }
 
-          console.log(`🎯 Final template: ${template.name} - $${template.fees}`);
           return template;
         });
 
         const testTemplatesResults = await Promise.all(testTemplatesPromises);
         const validTestTemplates = testTemplatesResults.filter(Boolean) as TestTemplateWithCategoryAndParams[];
 
-        console.log('✅ Final test templates loaded:', validTestTemplates.length);
-
-        const totalFees = validTestTemplates.reduce((sum, test) => sum + (test.fees || 0), 0);
-        console.log(`💰 Total fees calculated: $${totalFees}`);
-
         setSelectedTests(validTestTemplates);
       } else {
-        console.log('📭 No tests found for patient');
         setSelectedTests([]);
       }
 
@@ -217,7 +197,6 @@ export default function EditPatientPage() {
 
     // Enhanced double submission protection
     if (isSubmitting) {
-      console.log('🛑 Form submission blocked - already submitting');
       return;
     }
 
@@ -227,11 +206,8 @@ export default function EditPatientPage() {
     }
 
     setIsSubmitting(true);
-    console.log('🚀 STARTING PATIENT UPDATE PROCESS');
 
     try {
-      // STEP 1: Update patient basic info
-      console.log('📝 Step 1: Updating patient info...');
       const patientResponse = await fetch(`/api/patients/${patientId}`, {
         method: 'PUT',
         headers: {
@@ -247,11 +223,9 @@ export default function EditPatientPage() {
         const errorData = await patientResponse.json();
         throw new Error(`Failed to update patient: ${errorData.error}`);
       }
-      console.log('✅ Patient info updated successfully');
 
-      // STEP 2: Get current tests with detailed logging
-      console.log('🧪 Step 2: Fetching current tests...');
       const testsRes = await fetch(`/api/tests?patientId=${patientId}`);
+
       if (!testsRes.ok) {
         throw new Error('Failed to fetch current tests');
       }
@@ -259,15 +233,8 @@ export default function EditPatientPage() {
       const testsData = await testsRes.json();
       const currentTests = testsData.data || testsData;
 
-      console.log('🔍 Current tests found:', currentTests.length);
-      currentTests.forEach((test: any, index: number) => {
-        console.log(`  ${index + 1}. ${test.test_type} (ID: ${test.id})`);
-      });
-
       // STEP 3: Delete current tests with verification
-      console.log('🗑️ Step 3: Deleting current tests...');
       const deletePromises = currentTests.map(async (test: any) => {
-        console.log(`   Deleting: ${test.test_type} (${test.id})`);
         const deleteResponse = await fetch(`/api/tests/${test.id}`, {
           method: 'DELETE'
         });
@@ -276,26 +243,15 @@ export default function EditPatientPage() {
           console.error(`   ❌ Failed to delete test ${test.id}`);
           throw new Error(`Failed to delete test ${test.id}`);
         }
-        console.log(`   ✅ Deleted: ${test.test_type}`);
         return true;
       });
 
       // Wait for ALL deletions to complete
       await Promise.all(deletePromises);
-      console.log('✅ All tests deleted successfully');
 
-      // STEP 4: Brief pause to ensure database is updated
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // STEP 5: Create new tests with verification
-      console.log('🆕 Step 4: Creating new tests...');
-      console.log('🎯 Tests to create:', selectedTests.length);
-      selectedTests.forEach((test, index) => {
-        console.log(`  ${index + 1}. ${test.name} (Template ID: ${test.id})`);
-      });
-
       const createPromises = selectedTests.map(async (test, index) => {
-        console.log(`   Creating: ${test.name} (${index + 1}/${selectedTests.length})`);
 
         const testData = {
           patient_id: patientId,
@@ -320,31 +276,17 @@ export default function EditPatientPage() {
         }
 
         const createdTest = await createResponse.json();
-        console.log(`   ✅ Created: ${test.name} (ID: ${createdTest.data?.id})`);
         return createdTest;
       });
 
       // Wait for ALL creations to complete
       await Promise.all(createPromises);
-      console.log('✅ All new tests created successfully');
 
-      // STEP 6: Final verification
-      console.log('🔍 Step 5: Verifying final state...');
       const finalCheckRes = await fetch(`/api/tests?patientId=${patientId}`);
-      if (finalCheckRes.ok) {
-        const finalData = await finalCheckRes.json();
-        const finalTests = finalData.data || finalData;
-        console.log('📊 Final test count:', finalTests.length);
-        finalTests.forEach((test: any, index: number) => {
-          console.log(`  ${index + 1}. ${test.test_type} (ID: ${test.id})`);
-        });
-      }
 
-      console.log('🎉 PATIENT UPDATE COMPLETED SUCCESSFULLY');
       router.push(`/patients/${patientId}`);
 
     } catch (error) {
-      console.error('❌ PATIENT UPDATE FAILED:', error);
       alert(`Failed to update patient: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
@@ -357,11 +299,6 @@ export default function EditPatientPage() {
         ? prev.filter(id => id !== doctorId)
         : [...prev, doctorId]
     );
-  };
-
-  const handleTestsChange = (tests: TestTemplateSearchResult[]) => {
-    console.log('🔄 Tests changed in form:', tests);
-    setSelectedTests(tests);
   };
 
   if (isLoading) {
@@ -549,7 +486,6 @@ export default function EditPatientPage() {
                   if (isSubmitting) {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('🛑 Button click prevented - already submitting');
                   }
                 }}
               >

@@ -1,23 +1,99 @@
-// app/patients/page.tsx
-import Link from 'next/link';
-import { localPrisma } from '../lib/db/local-client';
-import { PatientWithRelations } from '../types';
+'use client';
 
-export default async function PatientsPage() {
-  const patients = await localPrisma.patient.findMany({
-    where: { is_deleted: false },
-    include: {
-      doctors: {
-        include: {
-          doctor: true,
-        },
-      },
-    },
-    orderBy: { created_at: 'desc' },
-  }) as PatientWithRelations[];
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { PatientWithRelations } from '../types';
+import { DeleteConfirmationDialog } from '../components/delete-confirmation-dialog';
+
+export default function PatientsPage() {
+  const router = useRouter();
+  const [patients, setPatients] = useState<PatientWithRelations[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false); // ← Dialog state
+  const [patientToDelete, setPatientToDelete] = useState<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    loadPatients();
+  }, []);
+
+  const loadPatients = async () => {
+    try {
+      const response = await fetch('/api/patients');
+      if (response.ok) {
+        const result = await response.json();
+        setPatients(result.data || result);
+      }
+    } catch (error) {
+      console.error('Failed to fetch patients:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+  const handleDeleteClick = (patientId: string, patientName: string) => {
+    setPatientToDelete({ id: patientId, name: patientName });
+    setShowDeleteDialog(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!patientToDelete) return;
+
+    setIsDeleting(patientToDelete.id);
+
+    try {
+      const response = await fetch(`/api/patients/${patientToDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Refresh the patient list
+        await loadPatients();
+        setShowDeleteDialog(false);
+        setPatientToDelete(null);
+      } else {
+        alert(`Failed to delete patient: ${result.error}`);
+        setShowDeleteDialog(false);
+      }
+    } catch (error) {
+      console.error('Failed to delete patient:', error);
+      alert('Failed to delete patient');
+      setShowDeleteDialog(false);
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteDialog(false);
+    setPatientToDelete(null);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-gray-400">Loading patients...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      <DeleteConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Patient"
+        message={`Are you sure you want to delete patient "${patientToDelete?.name}"? This action cannot be undone.`}
+        confirmText="Delete Patient"
+        isLoading={isDeleting === patientToDelete?.id}
+      />
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
@@ -91,8 +167,12 @@ export default async function PatientsPage() {
                     >
                       Edit
                     </Link>
-                    <button className="text-red-600 hover:text-red-900">
-                      Delete
+                    <button
+                      onClick={() => handleDeleteClick(patient.id, patient.name)}
+                      className="text-red-600 hover:text-red-900"
+                      disabled={isDeleting === patient.id}
+                    >
+                      {isDeleting === patient.id ? 'Deleting...' : 'Delete'}
                     </button>
                   </td>
                 </tr>

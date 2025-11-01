@@ -28,6 +28,7 @@ export interface PatientQueueData {
   email?: string | null;
   address?: string | null;
   sync_status?: SyncStatus;
+  is_deleted?: boolean;
 }
 
 export interface DoctorQueueData {

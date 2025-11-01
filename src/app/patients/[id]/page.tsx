@@ -1,87 +1,82 @@
-import { notFound } from 'next/navigation';
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { localPrisma } from '../../lib/db/local-client';
 import { TestStatus } from '@prisma/client';
+import { PatientQueueData, PatientWithRelations, TestWithDoctor } from '../../types';
+import { DeleteConfirmationDialog } from '../../components/delete-confirmation-dialog';
 
-interface PatientDetailPageProps {
-  params: Promise<{ id: string }>
-}
 
-export default async function PatientDetailPage({ params }: PatientDetailPageProps) {
-  const { id } = await params
+export default function PatientDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params.id as string;
 
-  // CLEAN QUERY: Load patient with minimal, non-nested relationships
-  const patient = await localPrisma.patient.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      name: true,
-      date_of_birth: true,
-      phone: true,
-      email: true,
-      address: true,
-      created_at: true,
-      is_deleted: true,
-      // Doctors - simple relation
-      doctors: {
-        where: { is_deleted: false },
-        include: {
-          doctor: {
-            select: {
-              id: true,
-              name: true,
-              specialization: true
-            }
-          }
-        },
-        orderBy: { referred_at: 'desc' }
-      },
-      // Tests - simple relation without nesting
-      tests: {
-        where: { is_deleted: false },
-        include: {
-          doctor: {
-            select: {
-              id: true,
-              name: true,
-              specialization: true
-            }
-          }
-        },
-        orderBy: { created_at: 'desc' }
+  const [patient, setPatient] = useState<PatientWithRelations | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+
+  useEffect(() => {
+    loadPatient();
+  }, [id]);
+
+  const loadPatient = async () => {
+    try {
+      const response = await fetch(`/api/patients/${id}`);
+      if (response.ok) {
+        const result = await response.json();
+        setPatient(result.data);
+        // console.log(data.tests)
+      } else {
+        console.error('Failed to load patient');
       }
+    } catch (error) {
+      console.error('Failed to load patient:', error);
+    } finally {
+      setIsLoading(false);
     }
-  });
+  };
 
-  if (!patient || patient.is_deleted) {
-    notFound();
-  }
+  const handleDeleteClick = () => {
+    setShowDeleteDialog(true);
+  };
 
-  // Debug the actual data
-  console.log('🩺 PATIENT DETAIL DEBUG:', {
-    patientId: patient.id,
-    patientName: patient.name,
-    totalTests: patient.tests.length,
-    testDetails: patient.tests.map(t => ({
-      id: t.id,
-      test_type: t.test_type,
-      test_code: t.test_code,
-      status: t.status,
-      created_at: t.created_at
-    }))
-  });
 
-  // Check for duplicates by ID
-  const testIds = patient.tests.map(t => t.id);
-  const hasDuplicates = new Set(testIds).size !== testIds.length;
+  const handleDeleteCancel = () => {
+    setShowDeleteDialog(false);
+  };
 
-  if (hasDuplicates) {
-    console.log('🚨 DUPLICATE TEST IDs FOUND:', {
-      total: testIds.length,
-      unique: new Set(testIds).size,
-      duplicates: testIds.filter((id, index) => testIds.indexOf(id) !== index)
-    });
-  }
+  const handleDeleteConfirm = async () => {
+    if (!patient) return;
+
+    setIsDeleting(true);
+
+    try {
+      const response = await fetch(`/api/patients/${patient.id}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Redirect to patients list
+        router.push('/patients');
+      } else {
+        alert(`Failed to delete patient: ${result.error}`);
+        setShowDeleteDialog(false);
+      }
+    } catch (error) {
+      console.error('Failed to delete patient:', error);
+      alert('Failed to delete patient');
+      setShowDeleteDialog(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
 
   // Helper function to get status classes
   const getStatusClasses = (status: TestStatus) => {
@@ -115,8 +110,41 @@ export default async function PatientDetailPage({ params }: PatientDetailPagePro
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-gray-400">Loading patient data...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!patient || patient.is_deleted) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-gray-400">Patient not found</div>
+          <Link href="/patients" className="text-blue-500 hover:text-blue-700 mt-4 inline-block">
+            Back to Patients
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      <DeleteConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Patient"
+        message={`Are you sure you want to delete patient "${patient?.name}"? This will also delete all their tests and cannot be undone.`}
+        confirmText="Delete Patient"
+        isLoading={isDeleting}
+      />
+
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -130,19 +158,22 @@ export default async function PatientDetailPage({ params }: PatientDetailPagePro
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{patient.name}</h1>
               <p className="text-gray-600 mt-2">Patient Details</p>
-              {/* Debug info */}
-              {hasDuplicates && (
-                <div className="mt-2 p-2 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
-                  ⚠️ Debug: Found {testIds.length - new Set(testIds).size} duplicate tests
-                </div>
-              )}
             </div>
-            <Link
-              href={`/patients/${patient.id}/edit`}
-              className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
-            >
-              Edit Patient
-            </Link>
+            <div className="flex space-x-3">
+              <Link
+                href={`/patients/${patient.id}/edit`}
+                className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
+              >
+                Edit Patient
+              </Link>
+              <button
+                onClick={handleDeleteClick}
+                className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Patient'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -188,12 +219,10 @@ export default async function PatientDetailPage({ params }: PatientDetailPagePro
 
             {/* Tests Card */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold text-gray-900">
-                Laboratory Tests ({patient.tests.length})
-              </h2>
+              <h2 className="text-xl font-semibold text-gray-900">Laboratory Tests</h2>
               {patient.tests.length > 0 ? (
-                <div className="space-y-3 mt-4">
-                  {patient.tests.map((test) => (
+                <div className="space-y-3">
+                  {patient.tests.map((test: TestWithDoctor) => (
                     <div key={test.id} className="border border-gray-200 rounded-lg p-4">
                       <div className="flex justify-between items-start">
                         <div>
@@ -214,8 +243,6 @@ export default async function PatientDetailPage({ params }: PatientDetailPagePro
                           Tested: {new Date(test.tested_at).toLocaleDateString()}
                         </p>
                       )}
-                      {/* Debug: Show test ID */}
-                      <p className="text-xs text-gray-400 mt-1">ID: {test.id}</p>
                     </div>
                   ))}
                 </div>

@@ -23,17 +23,39 @@ export async function GET() {
   try {
     const { localPrisma } = await import('../../lib/db/local-client');
 
-    // Get pending counts from database
-    const pendingCounts = await localPrisma.$transaction([
-      localPrisma.patient.count({ where: { sync_status: 'Pending' } }),
-      localPrisma.doctor.count({ where: { sync_status: 'Pending' } }),
-      localPrisma.test.count({ where: { sync_status: 'Pending' } }),
+    // Get detailed counts for debugging
+    const [pendingPatients, pendingDoctors, pendingTests, totalTests, deletedPendingTests] = await localPrisma.$transaction([
+      localPrisma.patient.count({
+        where: {
+          sync_status: 'Pending',
+          is_deleted: false
+        }
+      }),
+      localPrisma.doctor.count({
+        where: {
+          sync_status: 'Pending',
+          is_deleted: false
+        }
+      }),
+      localPrisma.test.count({
+        where: {
+          sync_status: 'Pending',
+          is_deleted: false
+        }
+      }),
+      localPrisma.test.count(), // Total tests
+      localPrisma.test.count({
+        where: {
+          sync_status: 'Pending',
+          is_deleted: true
+        }
+      }),
     ]);
 
     const status = {
-      pendingPatients: pendingCounts[0],
-      pendingDoctors: pendingCounts[1],
-      pendingTests: pendingCounts[2],
+      pendingPatients,
+      pendingDoctors,
+      pendingTests,
     };
 
     return NextResponse.json(status);

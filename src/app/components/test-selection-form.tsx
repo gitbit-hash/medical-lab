@@ -84,13 +84,6 @@ export function TestSelectionForm({ selectedTests = [], onTestsChange }: TestSel
   // Update the addTest function to ensure parameters are included
   // In TestSelectionForm - addTest function
   const addTest = (test: any) => {
-    console.log('➕ ADD TEST CALLED:', {
-      testId: test.id,
-      testName: test.name,
-      currentSelectedCount: safeSelectedTests.length,
-      alreadyExists: safeSelectedTests.find(t => t.id === test.id) !== undefined
-    });
-
     // Convert any test type to TestTemplateWithCategoryAndParams
     const testWithParams: TestTemplateWithCategoryAndParams = {
       ...test,
@@ -108,12 +101,10 @@ export function TestSelectionForm({ selectedTests = [], onTestsChange }: TestSel
 
     // Double-check for duplicates
     if (safeSelectedTests.find(t => t.id === testWithParams.id)) {
-      console.log('🚫 Test already in selection, ignoring');
       return;
     }
 
     const newSelection = [...safeSelectedTests, testWithParams];
-    console.log('✅ New selection count:', newSelection.length);
     onTestsChange(newSelection);
     setSearchQuery('');
     setSearchResults([]);

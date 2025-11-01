@@ -14,7 +14,14 @@ export async function GET(request: Request, { params }: RouteParams) {
       include: {
         patients: {
           include: {
-            patient: true,
+            patient: {
+              include: {
+                tests: {
+                  where: { is_deleted: false }, // ← ADD THIS
+                  orderBy: { created_at: 'desc' }
+                }
+              }
+            },
           },
         },
       },

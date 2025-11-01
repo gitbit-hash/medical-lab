@@ -57,7 +57,10 @@ class SyncEngine {
 
     // Sync pending patients
     const pendingPatients = await localPrisma.patient.findMany({
-      where: { sync_status: 'Pending' as SyncStatus },
+      where: {
+        sync_status: 'Pending' as SyncStatus,
+        is_deleted: false
+      },
     });
 
     for (const patient of pendingPatients) {
@@ -72,7 +75,10 @@ class SyncEngine {
 
     // Sync pending doctors
     const pendingDoctors = await localPrisma.doctor.findMany({
-      where: { sync_status: 'Pending' as SyncStatus },
+      where: {
+        sync_status: 'Pending' as SyncStatus,
+        is_deleted: false
+      },
     });
 
     for (const doctor of pendingDoctors) {
@@ -87,7 +93,10 @@ class SyncEngine {
 
     // Sync pending tests
     const pendingTests = await localPrisma.test.findMany({
-      where: { sync_status: 'Pending' as SyncStatus },
+      where: {
+        sync_status: 'Pending' as SyncStatus,
+        is_deleted: false
+      },
     });
 
     for (const test of pendingTests) {
@@ -102,7 +111,39 @@ class SyncEngine {
   }
 
   private async syncPatientToRemote(patient: Patient, remote: any): Promise<void> {
-    if (patient.local_id) {
+    if (patient.is_deleted) {
+      // Handle patient deletion on remote
+      try {
+        await remote.patient.update({
+          where: { id: patient.id },
+          data: {
+            is_deleted: true,
+            // You might want to set other fields as needed
+          },
+        });
+
+        await localPrisma.patient.update({
+          where: { id: patient.id },
+          data: {
+            sync_status: 'Synced' as SyncStatus,
+            last_synced_at: new Date(),
+          },
+        });
+      } catch (error) {
+        // If patient doesn't exist on remote, that's fine - just mark as synced
+        if (error instanceof Error && error.message.includes('Record to update not found')) {
+          await localPrisma.patient.update({
+            where: { id: patient.id },
+            data: {
+              sync_status: 'Synced' as SyncStatus,
+              last_synced_at: new Date(),
+            },
+          });
+        } else {
+          throw error;
+        }
+      }
+    } else if (patient.local_id) {
       // New patient - create on remote
       const remotePatient = await remote.patient.create({
         data: {
